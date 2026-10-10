@@ -1,0 +1,53 @@
+import {useEffect,useMemo,useState} from 'react';
+import {useLiveQuery} from 'dexie-react-hooks';
+import {motion,AnimatePresence} from 'motion/react';
+import {ShieldCheck,FileText,Plus,ClipboardList,Timer,TrendingUp,CheckCircle2,Search,ChevronDown,User,Clock,Paperclip,ExternalLink,BarChart3,Scale,PenLine,XCircle,FilePlus2,Hourglass,Banknote} from 'lucide-react';
+import {db,fmt} from './db';
+import {seedPricing,decide,addProposal} from './pricedb';
+import {Num,Modal,Toast,useToast,IconBox} from './ui';
+
+const TABS=[['all','Tất cả'],['pending','Chờ duyệt'],['info','Cần bổ sung TT'],['approved','Đã phê duyệt'],['rejected','Từ chối']];
+const BASE={all:11,pending:0,info:1,approved:8,rejected:2};
+const PRIO='Ưu tiên cao';
+const defNote='Đồng ý phê duyệt với điều kiện bộ phận CSKH phải thông báo trước cho hội viên tối thiểu 07 ngày qua Zalo OA và Mobile App SmashPoint.';
+export default function Approvals(){
+  const all=useLiveQuery(()=>db.proposals.toArray(),[]);
+  const[tab,setTab]=useState('pending'),[sel,setSel]=useState('PR-2025-10-09'),[q,setQ]=useState(''),[sort,setSort]=useState('prio'),[note,setNote]=useState(defNote),[auto,setAuto]=useState(true),[modal,setModal]=useState(null),[f,setF]=useState({tier:'std'}),[toast,tn]=useToast();
+  useEffect(()=>{seedPricing()},[]);
+  const list=useMemo(()=>(all||[]).filter(p=>(tab==='all'||p.status===tab)&&(p.id+p.title).toLowerCase().includes(q.toLowerCase())).sort((a,b)=>sort==='prio'?(b.urgent?1:0)-(a.urgent?1:0)||b.ord-a.ord:b.ord-a.ord),[all,tab,q,sort]);
+  if(!all)return null;
+  const cnt=k=>(k==='all'?all.length:all.filter(p=>p.status===k).length)+BASE[k],pend=all.filter(p=>p.status==='pending').length,cur=all.find(p=>p.id===sel)||list[0]||all[0];
+  const act=async a=>{if(cur.status==='approved'||cur.status==='rejected')return tn('Phiếu này đã được xử lý');await decide(cur.id,a,note);tn(a==='approve'?`Đã phê duyệt ${cur.id} và hẹn giờ áp dụng`:a==='reject'?'Đã bác bỏ đề xuất':'Đã yêu cầu bổ sung hồ sơ')};
+  const create=async()=>{const id=await addProposal(f);setModal(null);setSel(id);setTab('pending');setF({tier:'std'});tn('Đã tạo phiếu '+id)};
+  const stc={done:['stp d',CheckCircle2],wait:['stp w',Hourglass],todo:['stp t',Clock]};
+  return(<div className="pgm ap">
+    <p className="crumb" style={{textTransform:'none',letterSpacing:0}}>Cài đặt hệ thống <i>›</i> Cấu hình biểu giá thuê sân <i>›</i> <b>Quy trình xét duyệt để xuất giá</b></p>
+    <div className="pgh"><div><h1>Xét duyệt đề xuất tăng giá <em className="pend">{pend} ĐỀ XUẤT CHỜ DUYỆT</em></h1><p className="mx"><ShieldCheck size={14}/> Ma trận phân quyền 3 cấp (Maker - Checker - Approver)</p><p className="sub">Thẩm định tác động tài chính, công suất lấp đầy và ký duyệt điều chỉnh biểu giá theo ca/ngày cho chuỗi cụm sân SmashPoint Pro.</p></div>
+      <div className="acts"><button className="wbtn" onClick={()=>setModal('mx')}><ShieldCheck size={16}/> Ma trận thẩm quyền</button><button className="wbtn" onClick={()=>window.print()}><FileText size={16}/> Xuất biên bản (PDF)</button><button className="gbtn" onClick={()=>setModal('new')}><Plus size={16}/> Tạo phiếu đề xuất mới</button></div></div>
+    <div className="ak">{[['CHỜ PHÊ DUYỆT',<><Num to={pend}/> <small>phiếu</small></>,ClipboardList,'#825100','#ffddb8',<small className="red">❗ 2 phiếu cấp bách cần duyệt trước 18:00</small>],['THỜI GIAN XỬ LÝ TB',<>4.2 <small>giờ</small></>,Timer,'#006948','#d8f1e6',<small className="gr"><TrendingUp size={13}/> Nhanh hơn 35% so với SLA (24h)</small>],['DỰ BÁO TĂNG TRƯỞNG DT',<span className="gr big2">+18.5%</span>,Banknote,'#006948','#d8f1e6',<small>+24.500.000đ/tháng nếu được duyệt</small>],['ĐÃ DUYỆT TRONG THÁNG',<><Num to={12+all.filter(p=>p.status==='approved'&&!p.id.includes('09-28')&&p.ord>4).length}/> <small>phiếu</small></>,CheckCircle2,'#565e74','#e1e8f5',<small><b className="gr">10 Chấp thuận</b> • <b className="red">02 Từ chối</b></small>]].map(([t,v,I,c,bg,f],i)=><motion.div key={t} className="card akc" style={{'--c':c}} initial={{opacity:0,y:14}} animate={{opacity:1,y:0}} transition={{delay:i*.06}}><div className="akt"><span>{t}</span><IconBox I={I} c={c} size={34} icon={17}/></div><h2>{v}</h2><div className="akf">{f}</div></motion.div>)}</div>
+    <div className="apg"><div>
+      <div className="card apl"><div className="apt">{TABS.map(([k,l])=><button key={k} className={tab===k?'on':''} onClick={()=>setTab(k)}>{l} <em>{k==='pending'?cnt(k):`(${cnt(k)})`}</em></button>)}</div>
+        <div className="afr"><div className="sbox"><Search size={16}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="PR-2025-10-09"/></div><button className="sel2">CN Tân Bình (8 s <ChevronDown size={13}/></button><select className="sel2" value={sort} onChange={e=>setSort(e.target.value)}><option value="prio">Ưu tiên</option><option value="new">Mới nhất</option></select></div></div>
+      <AnimatePresence mode="popLayout">{list.map((p,i)=><motion.div layout key={p.id} className={'card prp'+(cur?.id===p.id?' sel':'')+(p.status==='approved'?' ok':'')} initial={{opacity:0,y:14}} animate={{opacity:1,y:0}} exit={{opacity:0}} transition={{delay:i*.05}} onClick={()=>{setSel(p.id);setNote(defNote)}}>
+        <div className="ph2"><span className="pid">#{p.id}</span>{p.urgent?<em className="pr urg"><i/>{p.prio}</em>:<em className={'pr '+(p.status==='approved'?'okc':'inf')}>{p.status==='approved'&&'✓ '}{p.prio}</em>}<small>{p.at}</small></div>
+        <h3>{p.title}</h3>
+        {p.cur?<><p className="mt1"><User size={13}/> Người lập: <b>{p.creator}</b> ({p.role}) • <Clock size={13}/> Khung giờ: {p.window}</p><div className="pbx"><p>MỨC GIÁ HIỆN TẠI: <s>{fmt(p.cur)}/h</s> →</p><p>MỨC GIÁ ĐỀ XUẤT: <b>{fmt(p.next)}/h</b> <em className="pcp">{p.pct}</em></p></div></>:<p className="mt1">{p.summary}</p>}
+        {p.cur?<><p className="cap3">Tiến trình phê duyệt (Maker - Checker - Approver) <b>{p.status==='approved'?'Hoàn tất':'Bước '+(p.steps.findIndex(s=>s.st!=='done')+1||3)+'/3 - Chờ '+(p.steps.find(s=>s.st!=='done')?.w||'')}</b></p><div className="stps">{p.steps.map(s=>{const[c,I]=stc[s.st];return<div key={s.l} className={c}><b><I size={14}/> {s.l}</b><small>{s.w}</small><small>{s.st==='done'?s.t:s.st==='wait'?s.t:'Chưa tới lượt'}</small></div>})}</div>{p.files&&<div className="fil"><span><FileText size={14}/> {p.files}</span><u>Xem chi tiết thẩm định →</u></div>}</>:<div className="stn"><span><i className={'sd '+(p.status==='approved'?'g':'o')}/> {p.stepNote||'Đã hoàn tất quy trình'}</span><b className={p.delta?.startsWith('-')?'red':'gr'}>{p.delta}</b></div>}
+      </motion.div>)}</AnimatePresence>{!list.length&&<p className="mute" style={{padding:20}}>Không có phiếu ở trạng thái này.</p>}</div>
+    {cur&&<AnimatePresence mode="wait"><motion.aside key={cur.id+cur.status} className="card apd" initial={{opacity:0,x:16}} animate={{opacity:1,x:0}} exit={{opacity:0}}>
+      <div className="adh"><h3>#{cur.id} <em className="rcb">Bản thảo v3.5-RC</em></h3><ExternalLink size={16}/></div><small className="mute">Hồ sơ thẩm định tác động tài chính và vận hành</small>
+      <h4 className="sc"><BarChart3 size={17}/> Căn cứ đề xuất & Lý do điều chỉnh</h4><p className="qt">{cur.reason}</p>
+      {cur.sim&&<><div className="sch"><h4>Mô phỏng tác động doanh thu</h4><small>Tân Bình & Q7</small></div>{cur.sim.map((s,i)=><div key={s.n} className="sim2"><div className="s1"><b>{s.n}</b><b className="gr">{s.pct}</b></div><div className="s1"><span>{fmt(s.from)} → {fmt(s.to)}/h</span><span>Lấp đầy dự báo: {s.fill}%</span></div><div className="pbar"><motion.i initial={{width:0}} animate={{width:s.fill+'%'}} transition={{duration:1,delay:i*.15}}/></div></div>)}
+        <div className="plc"><Scale size={16}/><p><b>Chính sách giữ chân khách ruột:</b> {cur.policy}</p></div>
+        <div className="imp"><small>TÁC ĐỘNG DOANH THU RÒNG</small><div><b>{cur.impact}</b><em>{cur.impactPct}</em></div><small>ước tính tăng thêm / tháng</small></div></>}
+      {cur.appraisal&&<><h4 className="sc2">Ý kiến thẩm định chuyên môn</h4><div className="apr"><div className="aph"><span className="wi">{cur.appraisal.init}</span><div><b>{cur.appraisal.who}</b><small>{cur.appraisal.role}</small></div><em className="rec">{cur.appraisal.tag}</em></div><p>{cur.appraisal.text}</p><span className="atf"><Paperclip size={13}/> {cur.appraisal.file}</span></div></>}
+      {(cur.status==='pending'||cur.status==='info')?<div className="dec"><div className="dch"><h4><PenLine size={17}/> Ý kiến chỉ đạo của Ban Giám Đốc</h4><em className="rcb">Quyền hạn cấp 3</em></div><textarea value={note} onChange={e=>setNote(e.target.value)} rows={4}/>
+        <label className="chk"><input type="checkbox" checked={auto} onChange={e=>setAuto(e.target.checked)}/> Tự động kích hoạt biểu giá mới từ <b>{cur.applyDate}</b></label>
+        <motion.button whileTap={{scale:.98}} className="appb" onClick={()=>act('approve')}><CheckCircle2 size={19}/> Phê duyệt & Hẹn giờ áp dụng</motion.button>
+        <div className="two2"><button className="wbtn" onClick={()=>act('info')}><FilePlus2 size={16}/> Yêu cầu bổ sung hồ sơ</button><button className="rjb" onClick={()=>act('reject')}><XCircle size={16}/> Bác bỏ đề xuất</button></div></div>
+        :<div className={'dec done '+cur.status}><b>{cur.status==='approved'?'✓ Đã phê duyệt':'✕ Đã bác bỏ'}</b>{cur.boardNote&&<p>{cur.boardNote}</p>}<small>Xem kết quả tại Lịch sử giá & Audit Log.</small></div>}
+    </motion.aside></AnimatePresence>}</div>
+    <Modal open={modal==='new'} onClose={()=>setModal(null)} title="Tạo phiếu đề xuất mới"><input className="inp" placeholder="Tiêu đề đề xuất" onChange={e=>setF({...f,title:e.target.value})}/><select className="inp" value={f.tier} onChange={e=>setF({...f,tier:e.target.value})}><option value="std">Sân Tiêu Chuẩn</option><option value="vip">Sân VIP BWF Yonex</option></select><input className="inp" type="number" step="1000" placeholder="Mức giá giờ vàng đề xuất (đ/h)" onChange={e=>setF({...f,next:e.target.value})}/><textarea className="inp" rows="3" placeholder="Căn cứ / lý do" onChange={e=>setF({...f,reason:e.target.value})}/><button className="gbtn wide" onClick={create}>Gửi duyệt</button></Modal>
+    <Modal open={modal==='mx'} onClose={()=>setModal(null)} title="Ma trận thẩm quyền"><table className="dft"><tbody><tr><td><b>Cấp 1 – Maker</b></td><td>Quản lý cụm sân: lập đề xuất ≤ ±10%</td></tr><tr><td><b>Cấp 2 – Checker</b></td><td>Kế toán & Phân tích: thẩm định tác động doanh thu</td></tr><tr><td><b>Cấp 3 – Approver</b></td><td>Ban Giám Đốc: duyệt mọi thay đổi &gt; ±10% hoặc toàn chuỗi</td></tr></tbody></table></Modal>
+    <Toast msg={toast}/></div>);
+}
